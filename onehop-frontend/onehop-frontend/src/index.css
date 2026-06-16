@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand */
+  --color-primary: #ff6a00;
+  --color-primary-dark: #e85a00;
+  --color-primary-light: #fff1e6;
+  --color-primary-soft: #ffe3d1;
+
+  /* Accent (AI / premium) */
+  --color-accent: #7c5cfc;
+  --color-accent-dark: #6a47f0;
+  --color-accent-light: #efe9ff;
+
+  /* Status */
+  --color-success: #1aa15e;
+  --color-success-light: #e7f8ef;
+  --color-warning: #e08a00;
+  --color-warning-light: #fff4e0;
+  --color-info: #2f7df6;
+  --color-info-light: #e9f1ff;
+  --color-danger: #e3483a;
+  --color-danger-light: #fdeeec;
+
+  /* Neutrals */
+  --color-ink: #1c1f26;
+  --color-body: #3f4452;
+  --color-muted: #8b909c;
+  --color-faint: #c6cad3;
+  --color-line: #edeff3;
+  --color-surface: #ffffff;
+  --color-app-bg: #f7f7f9;
+
+  /* Fonts */
+  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  /* Radius */
+  --radius-card: 1.1rem;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-card: 0 2px 18px -4px rgba(28, 31, 38, 0.07);
+  --shadow-card-hover: 0 8px 28px -6px rgba(28, 31, 38, 0.12);
+  --shadow-nav: 0 -2px 20px -4px rgba(28, 31, 38, 0.08);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background: var(--color-app-bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-faint);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Hide scrollbar for horizontal chip rows */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Focus visibility */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
