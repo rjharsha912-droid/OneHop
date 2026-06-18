@@ -9,6 +9,7 @@ import { TabBar } from "@/components/ui/TabBar";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { useNavigate } from "react-router-dom";
+import { cabApi, type CabResponse } from "@/lib/api";
 
 type Tab = "flights" | "trains" | "cabs" | "local";
 
@@ -34,10 +35,33 @@ const AIRLINE_COLORS: Record<string, string> = {
   Vistara: "#a01a7d",
 };
 
+const CITIES = ["Ooty", "Coimbatore", "Bangalore", "Chennai", "Goa", "Mumbai", "Delhi", "Jaipur", "Mysore", "Pune"];
+
 export default function Transport() {
   const navigate = useNavigate();
   const { itinerary } = useChatStore();
   const [tab, setTab] = useState<Tab>("flights");
+
+  // Cab state
+  const [fromCity, setFromCity] = useState(itinerary?.departure_city ?? "Ooty");
+  const [toCity, setToCity] = useState(itinerary?.city ?? "Coimbatore");
+  const [cabData, setCabData] = useState<CabResponse | null>(null);
+  const [cabLoading, setCabLoading] = useState(false);
+  const [cabError, setCabError] = useState<string | null>(null);
+
+  const fetchCabPrices = async () => {
+    if (!fromCity || !toCity) return;
+    setCabLoading(true);
+    setCabError(null);
+    try {
+      const data = await cabApi.getEstimate(fromCity, toCity);
+      setCabData(data);
+    } catch (err: any) {
+      setCabError(err?.response?.data?.detail ?? "Could not fetch cab prices.");
+    } finally {
+      setCabLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -54,7 +78,6 @@ export default function Transport() {
         }
       />
 
-      {/* Route summary banner */}
       {itinerary && (
         <div className="flex items-center gap-3 rounded-2xl bg-primary-light p-3">
           <Plane size={18} className="shrink-0 text-primary" />
@@ -66,20 +89,18 @@ export default function Transport() {
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
+      {/* ── FLIGHTS ── */}
       {tab === "flights" && (
         <div className="space-y-3">
           {MOCK_FLIGHTS.map((flight) => (
             <Card key={flight.code} className="space-y-3">
               <div className="flex items-center gap-3">
-                {/* Airline logo pill */}
                 <div
                   className="flex h-9 w-14 shrink-0 items-center justify-center rounded-xl text-white text-xs font-bold"
                   style={{ background: AIRLINE_COLORS[flight.airline] ?? "#ff6a00" }}
                 >
                   {flight.airline.split(" ").map((w) => w[0]).join("")}
                 </div>
-
-                {/* Times */}
                 <div className="flex flex-1 items-center gap-2">
                   <div className="text-center">
                     <p className="text-base font-extrabold text-ink">{flight.dep}</p>
@@ -101,24 +122,17 @@ export default function Transport() {
                     <p className="text-xs text-muted">{itinerary?.city?.slice(0, 3).toUpperCase() ?? "GOI"}</p>
                   </div>
                 </div>
-
-                {/* Price + Select */}
                 <div className="shrink-0 text-right">
                   <p className="text-base font-extrabold text-ink">₹{flight.price.toLocaleString("en-IN")}</p>
                   <p className="text-[11px] text-muted">per adult</p>
                 </div>
               </div>
-
               <div className="flex items-center justify-between text-xs text-muted">
                 <span>7 kg cabin · 15 kg check-in · Free Meal</span>
-                <Button size="sm" onClick={() => navigate("/booking-confirmation")}>
-                  Select
-                </Button>
+                <Button size="sm" onClick={() => navigate("/booking-confirmation")}>Select</Button>
               </div>
             </Card>
           ))}
-
-          {/* Flexible booking note */}
           <div className="flex items-center gap-2 rounded-2xl bg-success-light p-3 text-sm text-success">
             <span className="text-lg">✅</span>
             <span>Flexible Booking — Free cancellation available on select flights.</span>
@@ -126,6 +140,7 @@ export default function Transport() {
         </div>
       )}
 
+      {/* ── TRAINS ── */}
       {tab === "trains" && (
         <div className="space-y-3">
           <Card className="flex items-center gap-4">
@@ -157,23 +172,75 @@ export default function Transport() {
         </div>
       )}
 
-      {tab === "cabs" && !itinerary && (
-        <EmptyState
-          icon={<Car size={28} />}
-          title="Plan a trip first"
-          description="Your cab recommendations will appear after you plan a trip with OneHop AI."
-          action={<Button onClick={() => navigate("/chat")}>Plan a trip</Button>}
-        />
-      )}
+      {/* ── CABS ── */}
+      {tab === "cabs" && (
+        <div className="space-y-4">
+          {/* City selector */}
+          <Card className="space-y-3">
+            <p className="text-sm font-bold text-ink">Compare Cab Prices</p>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <p className="text-xs text-muted mb-1">From</p>
+                <select
+                  value={fromCity}
+                  onChange={(e) => setFromCity(e.target.value)}
+                  className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+                >
+                  {CITIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted mb-1">To</p>
+                <select
+                  value={toCity}
+                  onChange={(e) => setToCity(e.target.value)}
+                  className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink"
+                >
+                  {CITIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+            <Button onClick={fetchCabPrices} className="w-full">
+              {cabLoading ? "Checking prices..." : "Get Cab Prices"}
+            </Button>
+          </Card>
 
-      {tab === "cabs" && itinerary && (
-        <div className="space-y-3">
-          {itinerary.recommended_transport
-            .filter((t) => t.type.toLowerCase().includes("taxi") || t.type.toLowerCase().includes("cab"))
-            .map((t) => <TransportCard key={t.type} option={t} />)}
+          {/* Error */}
+          {cabError && (
+            <p className="text-sm text-red-400 text-center">{cabError}</p>
+          )}
+
+          {/* Results */}
+          {cabData && !cabLoading && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted text-center">
+                {cabData.from_city} → {cabData.to_city} · {cabData.distance_km} km
+              </p>
+              {cabData.estimates.map((cab) => (
+                <Card key={cab.cab_type} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{cab.emoji}</span>
+                    <div>
+                      <p className="font-bold text-ink">{cab.cab_type}</p>
+                      <p className="text-xs text-muted">{cab.duration_hrs} hrs · {cab.distance_km} km</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-extrabold text-ink">
+                      ₹{cab.fare_min.toLocaleString("en-IN")} – ₹{cab.fare_max.toLocaleString("en-IN")}
+                    </p>
+                    <Button size="sm" onClick={() => navigate("/booking-confirmation")}>
+                      Book
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
+      {/* ── LOCAL ── */}
       {tab === "local" && itinerary && (
         <div className="space-y-3">
           {itinerary.recommended_transport.map((t) => (

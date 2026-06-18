@@ -143,3 +143,112 @@ export const weatherApi = {
     return data;
   },
 };
+
+// ──────────────────────────────────────────────
+// Cab endpoints
+// ──────────────────────────────────────────────
+
+export type CabEstimate = {
+  cab_type: string;
+  emoji: string;
+  fare_min: number;
+  fare_max: number;
+  duration_hrs: number;
+  distance_km: number;
+};
+
+export type CabResponse = {
+  from_city: string;
+  to_city: string;
+  distance_km: number;
+  estimates: CabEstimate[];
+};
+
+export const cabApi = {
+  async getEstimate(fromCity: string, toCity: string): Promise<CabResponse> {
+    const { data } = await api.get<CabResponse>("/cab/estimate", {
+      params: { from_city: fromCity, to_city: toCity },
+    });
+    return data;
+  },
+
+  async getCities(): Promise<{ cities: string[] }> {
+    const { data } = await api.get("/cab/cities");
+    return data;
+  },
+};
+export type Hotel = {
+  name: string;
+  type: string;
+  price_per_night: number;
+  rating: number;
+  amenities: string[];
+  location: string;
+};
+
+export type HotelSearchResponse = {
+  city: string;
+  hotels: Hotel[];
+};
+
+export const hotelApi = {
+  async searchHotels(city: string): Promise<HotelSearchResponse> {
+    const { data } = await api.get<HotelSearchResponse>(`/hotels/search`, {
+      params: { city },
+    });
+    return data;
+  },
+};
+// ──────────────────────────────────────────────
+// Food endpoints
+// ──────────────────────────────────────────────
+
+export type Restaurant = {
+  name: string;
+  cuisine: string;
+  avg_cost_per_person: number;
+  rating: number;
+  type: string;
+  location: string;
+  specialty: string;
+};
+
+export type FoodSearchResponse = {
+  city: string;
+  restaurants: Restaurant[];
+};
+
+export const foodApi = {
+  async searchRestaurants(city: string): Promise<FoodSearchResponse> {
+    const { data } = await api.get<FoodSearchResponse>("/food/search", {
+      params: { city },
+    });
+    return data;
+  },
+};
+
+// ──────────────────────────────────────────────
+// Profile endpoints
+// ──────────────────────────────────────────────
+
+export type ProfileStats = {
+  total_trips: number;
+  total_chats: number;
+  travel_points: number;
+  wallet_balance: number;
+  flights_booked: number;
+  hotels_booked: number;
+  cabs_booked: number;
+};
+
+export const profileApi = {
+  async getStats(): Promise<ProfileStats> {
+    const { data } = await api.get<ProfileStats>("/profile/stats");
+    return data;
+  },
+
+  async updateProfile(name: string): Promise<{ message: string; name: string }> {
+    const { data } = await api.put("/profile/update", { name });
+    return data;
+  },
+};

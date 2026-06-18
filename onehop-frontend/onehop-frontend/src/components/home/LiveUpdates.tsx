@@ -1,47 +1,72 @@
-import { CloudRain, TrafficCone, Bus } from "lucide-react";
-import { Card } from "@/components/ui/Card";
+import { CloudRain, TrafficCone, Bus, Zap } from "lucide-react";
 
 const UPDATES = [
   {
-    icon: <CloudRain size={18} />,
-    iconBg: "bg-info-light text-info",
+    Icon: CloudRain,
+    color: "#0077b6",
+    bg: "#e0f0ff",
     title: "28°C",
     subtitle: "Light Rain",
     meta: "Coimbatore",
-    cardBg: "bg-info-light/60",
+    badge: "LIVE",
+    badgeBg: "#0077b6",
   },
   {
-    icon: <TrafficCone size={18} />,
-    iconBg: "bg-warning-light text-warning",
-    title: "Traffic",
-    subtitle: "Moderate",
+    Icon: TrafficCone,
+    color: "#e08a00",
+    bg: "#fff4e0",
+    title: "Moderate",
+    subtitle: "Traffic",
     meta: "Mettupalayam Rd",
-    cardBg: "bg-warning-light/60",
+    badge: "ALERT",
+    badgeBg: "#e08a00",
   },
   {
-    icon: <Bus size={18} />,
-    iconBg: "bg-success-light text-success",
+    Icon: Bus,
+    color: "#e3483a",
+    bg: "#fdeeec",
     title: "Bus 447",
-    subtitle: "Delayed",
-    meta: "+15 min",
-    cardBg: "bg-success-light/60",
+    subtitle: "Delayed +15m",
+    meta: "Next stop",
+    badge: "DELAY",
+    badgeBg: "#e3483a",
   },
 ];
 
 export function LiveUpdates() {
   return (
     <div>
-      <h2 className="mb-3 text-base font-bold text-ink">Live Updates</h2>
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-        {UPDATES.map((u) => (
-          <Card key={u.title} className={`${u.cardBg} border-none p-3 shadow-none`}>
-            <div className={`mb-2 flex size-8 items-center justify-center rounded-full ${u.iconBg}`}>
-              {u.icon}
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-base font-extrabold text-ink">Live Updates</h2>
+        <span className="flex items-center gap-1 rounded-full bg-[#e3483a] px-2 py-0.5 text-[10px] font-extrabold text-white">
+          <Zap size={9} fill="white" /> LIVE
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2.5">
+        {UPDATES.map(({ Icon, color, bg, title, subtitle, meta, badge, badgeBg }) => (
+          <div
+            key={title}
+            className="rounded-2xl p-3 animate-fade-in-up"
+            style={{ background: bg }}
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <div
+                className="flex size-9 items-center justify-center rounded-xl"
+                style={{ background: `${color}22` }}
+              >
+                <Icon size={18} style={{ color }} />
+              </div>
+              <span
+                className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-lg text-white"
+                style={{ background: badgeBg }}
+              >
+                {badge}
+              </span>
             </div>
-            <p className="text-sm font-bold text-ink leading-tight">{u.title}</p>
-            <p className="text-xs text-body">{u.subtitle}</p>
-            <p className="mt-1 truncate text-[11px] text-muted">{u.meta}</p>
-          </Card>
+            <p className="text-sm font-extrabold text-ink">{title}</p>
+            <p className="text-xs font-medium text-body">{subtitle}</p>
+            <p className="mt-0.5 truncate text-[10px] text-muted">{meta}</p>
+          </div>
         ))}
       </div>
     </div>

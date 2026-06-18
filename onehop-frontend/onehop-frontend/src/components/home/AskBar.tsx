@@ -2,8 +2,17 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Mic, ArrowUp } from "lucide-react";
 
+const PLACEHOLDERS = [
+  "Where do you want to go?",
+  "Best hotels in Ooty?",
+  "Cab from Chennai to Bangalore?",
+  "Street food in Mumbai?",
+  "Weekend trip near Coimbatore?",
+];
+
 export function AskBar() {
   const [value, setValue] = useState("");
+  const [phIdx] = useState(() => Math.floor(Math.random() * PLACEHOLDERS.length));
   const navigate = useNavigate();
 
   const handleSubmit = (e: FormEvent) => {
@@ -12,21 +21,22 @@ export function AskBar() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-14 items-center gap-3 rounded-pill bg-surface px-4 shadow-card">
-      <Search size={20} className="shrink-0 text-muted" />
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Ask OneHop anything..."
-        className="h-full flex-1 bg-transparent text-[15px] text-ink placeholder:text-muted outline-none"
-      />
-      <button
-        type="submit"
-        aria-label="Ask OneHop"
-        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-white transition-transform active:scale-95"
-      >
-        {value.trim() ? <ArrowUp size={18} /> : <Mic size={18} />}
-      </button>
+    <form onSubmit={handleSubmit}>
+      <div className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_4px_20px_-4px_rgba(0,119,182,0.15)] border-2 border-[#0077b6]/10 focus-within:border-[#0077b6]/40 transition-colors">
+        <Search size={20} className="shrink-0 text-[#0077b6]" />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={PLACEHOLDERS[phIdx]}
+          className="h-full flex-1 bg-transparent text-[15px] font-medium text-ink placeholder:text-muted outline-none"
+        />
+        <button
+          type="submit"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0077b6] text-white press shadow-sm"
+        >
+          {value.trim() ? <ArrowUp size={18} /> : <Mic size={18} />}
+        </button>
+      </div>
     </form>
   );
 }

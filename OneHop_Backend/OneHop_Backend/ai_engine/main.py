@@ -5,39 +5,44 @@ from pydantic import BaseModel
 from typing import Optional
 import requests
 import json
+import re
 import sys
 import os
+from dotenv import load_dotenv
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 from mock_data import get_city_data, get_available_cities
 
-app = FastAPI(title="OneHop AI Engine", version="1.0.0")
+app = FastAPI(title="OneHop AI Engine", version="3.0.0")
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "phi3:mini"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
-TRIP_QUESTIONS = [
-    "Which city in India would you like to visit? We support: Goa, Ooty, Mumbai, Delhi, Jaipur.",
-    "How many days are you planning to stay?",
-    "How many people are travelling?",
-    "What is your total budget in INR? (e.g. 10000, 50000, 100000)",
-    "What type of accommodation do you prefer? (budget / mid-range / luxury)",
-    "What is your travel style? (adventure / relaxation / cultural / food / mixed)",
-    "Do you have any dietary preferences? (vegetarian / non-vegetarian / vegan)",
-    "What mode of transport do you prefer for local travel? (taxi / auto / public transport / rental)",
-    "Are there any activities you specifically want to do? (beaches / trekking / shopping / sightseeing / nightlife)",
-    "What is your departure city? (We'll help plan your travel to the destination)"
-]
+SYSTEM_PROMPT = """You are OneHop AI, a friendly Indian travel assistant. You can chat naturally and answer ANY question about travel in India - destinations, food, culture, safety, weather, budgeting, best time to visit, local transport, etc.
 
-QUESTION_KEYS = [
-    "city", "days", "people", "budget",
-    "accommodation", "travel_style", "dietary",
-    "transport", "activities", "departure_city"
-]
+We have detailed hotel/food/transport data for these cities only: Goa, Ooty, Mumbai, Delhi, Jaipur.
 
+If the user wants a COMPLETE trip itinerary, gather these details through natural conversation (one or two at a time, not a rigid list):
+- destination city (must be Goa, Ooty, Mumbai, Delhi, or Jaipur)
+- number of days
+- number of travellers
+- total budget in INR
+- accommodation preference (budget / mid-range / luxury)
+- travel style (adventure / relaxation / cultural / food / mixed)
+- dietary preference (vegetarian / non-vegetarian / vegan)
+- local transport preference (taxi / auto / public transport / rental)
+- activities of interest
+- departure city
 
-# ---------- Models ----------
+Once you have ALL ten details, end your reply with exactly this on its own line:
+ITINERARY_READY: {"city": "...", "days": "...", "people": "...", "budget": "...", "accommodation": "...", "travel_style": "...", "dietary": "...", "transport": "...", "activities": "...", "departure_city": "..."}
+
+Only output that line when you truly have all 10 details confirmed. Otherwise just chat normally. Keep replies short, warm, and friendly."""
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -54,46 +59,58 @@ class ChatResponse(BaseModel):
     is_complete: bool = False
 
 
-# ---------- Helpers ----------
-
-def ask_ollama(prompt: str) -> str:
-    """Send a prompt to local Ollama and return the response."""
+def ask_gemini(prompt: str) -> str:
+    if not GEMINI_API_KEY:
+        return "Gemini API key not configured. Add GEMINI_API_KEY to .env"
     try:
         response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=120  # ← increased from 60
+            GEMINI_URL,
+            headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30
         )
         data = response.json()
-        return data.get("response", "Sorry, I could not generate a response.")
+        if response.status_code != 200:
+            err_msg = data.get("error", {}).get("message", response.text)
+            return f"Gemini API error: {err_msg}"
+        candidates = data.get("candidates", [])
+        if not candidates:
+            return "Sorry, I could not generate a response."
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts:
+            return "Sorry, I could not generate a response."
+        return parts[0].get("text", "Sorry, I could not generate a response.")
+    except requests.exceptions.Timeout:
+        return "Gemini API took too long. Please try again."
     except requests.exceptions.ConnectionError:
-        return "Ollama is not running. Please start Ollama with 'ollama serve'."
+        return "Could not reach Gemini API. Check internet connection."
     except Exception as e:
         return f"AI error: {str(e)}"
 
 
-def extract_city(message: str) -> Optional[str]:
-    """Extract city name from user message."""
-    message_lower = message.lower()
-    for city in get_available_cities():
-        if city in message_lower:
-            return city
-    return None
+def build_prompt(history: list, message: str) -> str:
+    convo_text = ""
+    for turn in history[-12:]:
+        role = "User" if turn.get("role") == "user" else "OneHop AI"
+        convo_text += f"{role}: {turn.get('content', '')}\n"
+    convo_text += f"User: {message}\nOneHop AI:"
+    return f"{SYSTEM_PROMPT}\n\n{convo_text}"
 
 
-def filter_hotels_by_budget(hotels: list, budget: int, days: int, people: int) -> list:
-    """Filter hotels based on budget per person per night."""
-    budget_per_person_per_night = (budget * 0.4) / (people * days)
-    filtered = [h for h in hotels if h["price_per_night"] <= budget_per_person_per_night]
-    return filtered if filtered else [hotels[0]]
+def extract_itinerary_request(reply: str):
+    match = re.search(r"ITINERARY_READY:\s*(\{.*\})", reply, re.DOTALL)
+    if not match:
+        return reply, None
+    json_str = match.group(1)
+    clean_reply = reply[:match.start()].strip()
+    try:
+        data = json.loads(json_str)
+        return clean_reply, data
+    except json.JSONDecodeError:
+        return reply, None
 
 
 def filter_transport_by_preference(transport: list, preference: str) -> list:
-    """Filter transport based on user preference."""
     preference_lower = preference.lower()
     if "public" in preference_lower:
         preferred = [t for t in transport if any(k in t["type"].lower() for k in ["bus", "train", "metro"])]
@@ -109,20 +126,17 @@ def filter_transport_by_preference(transport: list, preference: str) -> list:
 
 
 def build_itinerary(trip_data: dict) -> dict:
-    """Build a full itinerary from trip data and mock data."""
-    city = trip_data.get("city", "").lower()
-    days = int(trip_data.get("days", 3))
-    people = int(trip_data.get("people", 2))
-    budget = int(trip_data.get("budget", 20000))
-    accommodation = trip_data.get("accommodation", "mid-range").lower()
-    transport_pref = trip_data.get("transport", "taxi")
+    city = str(trip_data.get("city", "")).lower()
+    days = int(trip_data.get("days", 3) or 3)
+    people = int(trip_data.get("people", 2) or 2)
+    budget = int(trip_data.get("budget", 20000) or 20000)
+    accommodation = str(trip_data.get("accommodation", "mid-range")).lower()
+    transport_pref = str(trip_data.get("transport", "taxi"))
 
     city_data = get_city_data(city)
-
     if not city_data:
         return {"error": f"No data available for {city}"}
 
-    # --- Hotels ---
     hotels = city_data.get("hotels", [])
     if "budget" in accommodation:
         recommended_hotels = [h for h in hotels if h["price_per_night"] < 2000]
@@ -130,33 +144,23 @@ def build_itinerary(trip_data: dict) -> dict:
         recommended_hotels = [h for h in hotels if h["price_per_night"] > 5000]
     else:
         recommended_hotels = [h for h in hotels if 2000 <= h["price_per_night"] <= 5000]
-
     if not recommended_hotels:
         recommended_hotels = hotels[:2]
 
-    # --- Transport ---
     transport = filter_transport_by_preference(city_data.get("transport", []), transport_pref)
-
-    # --- Restaurants ---
     restaurants = city_data.get("restaurants", [])
-
-    # --- Tourist Places ---
     tourist_places = city_data.get("tourist_places", [])
 
-    # --- Day-wise plan ---
     places_per_day = max(1, len(tourist_places) // days)
     day_plan = []
     place_index = 0
-
     for day in range(1, days + 1):
         daily_places = []
         for _ in range(places_per_day):
             if place_index < len(tourist_places):
                 daily_places.append(tourist_places[place_index])
                 place_index += 1
-
-        restaurant_for_day = restaurants[day % len(restaurants)]
-
+        restaurant_for_day = restaurants[day % len(restaurants)] if restaurants else None
         day_plan.append({
             "day": day,
             "places_to_visit": daily_places,
@@ -164,10 +168,9 @@ def build_itinerary(trip_data: dict) -> dict:
             "tip": "Start early to avoid crowds at popular spots."
         })
 
-    # --- Cost Estimate ---
     hotel_cost = recommended_hotels[0]["price_per_night"] * days * (people // 2 or 1)
-    transport_cost = transport[0]["price_per_day"] * days
-    food_cost = restaurants[0]["avg_cost_per_person"] * people * days * 3
+    transport_cost = transport[0]["price_per_day"] * days if transport else 0
+    food_cost = restaurants[0]["avg_cost_per_person"] * people * days * 3 if restaurants else 0
     total_estimated = hotel_cost + transport_cost + food_cost
 
     return {
@@ -189,8 +192,7 @@ def build_itinerary(trip_data: dict) -> dict:
     }
 
 
-def build_itinerary_prompt(trip_data: dict, itinerary: dict) -> str:
-    """Build a shorter prompt for faster Ollama response."""
+def build_itinerary_summary_prompt(trip_data: dict, itinerary: dict) -> str:
     city = trip_data.get('city', '').title()
     days = trip_data.get('days', '')
     budget = trip_data.get('budget', '')
@@ -204,93 +206,57 @@ Budget: Rs{budget}. Recommended hotel: {hotels}. Estimated cost: Rs{total}. With
 Be warm, friendly and specific to {city}. End with one travel tip."""
 
 
-# ---------- Routes ----------
-
 @app.get("/")
 def root():
-    return {"message": "OneHop AI Engine is running", "model": OLLAMA_MODEL}
+    return {"message": "OneHop AI Engine is running", "model": GEMINI_MODEL}
 
 
 @app.get("/health")
 def health():
-    """Check if Ollama is reachable."""
-    try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code == 200:
-            return {"status": "healthy", "ollama": "connected", "model": OLLAMA_MODEL}
-    except:
-        pass
-    return {"status": "unhealthy", "ollama": "disconnected"}
+    return {"status": "healthy" if GEMINI_API_KEY else "unhealthy", "gemini_configured": bool(GEMINI_API_KEY)}
 
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
-    """
-    Main chat endpoint.
-    Asks 10 questions one by one, then builds and returns itinerary.
-    """
     message = request.message.strip()
     history = request.conversation_history
     trip_data = request.trip_data.copy()
-    question_index = len(trip_data)
 
-    # --- Greeting on first message ---
-    if question_index == 0 and not message:
+    if not message and not history:
         return ChatResponse(
-            reply="Namaste! 🙏 Welcome to OneHop — your personal Indian travel assistant! I'll help you plan the perfect trip. Let's start!",
-            next_question=TRIP_QUESTIONS[0],
-            question_index=0,
+            reply="Namaste! 🙏 I'm OneHop AI - ask me anything about travelling in India, or tell me you'd like a full trip plan!",
             trip_data=trip_data
         )
 
-    # --- Store the answer to current question ---
-    if question_index < len(QUESTION_KEYS):
-        key = QUESTION_KEYS[question_index]
+    prompt = build_prompt(history, message)
+    raw_reply = ask_gemini(prompt)
+    clean_reply, extracted_trip_data = extract_itinerary_request(raw_reply)
 
-        # Special handling for city
-        if key == "city":
-            city = extract_city(message)
-            if not city:
-                return ChatResponse(
-                    reply=f"Sorry, we don't have data for that city yet. Please choose from: {', '.join(get_available_cities()).title()}",
-                    next_question=TRIP_QUESTIONS[0],
-                    question_index=0,
-                    trip_data=trip_data
-                )
-            trip_data["city"] = city
-        else:
-            trip_data[key] = message
+    if extracted_trip_data:
+        city_lower = str(extracted_trip_data.get("city", "")).lower()
+        if city_lower not in get_available_cities():
+            return ChatResponse(
+                reply=f"I can build detailed itineraries only for: {', '.join(c.title() for c in get_available_cities())}. Could you pick one of these?",
+                trip_data=trip_data
+            )
 
-        question_index = len(trip_data)
-
-    # --- Ask next question if not all answered ---
-    if question_index < len(TRIP_QUESTIONS):
-        next_q = TRIP_QUESTIONS[question_index]
+        itinerary = build_itinerary(extracted_trip_data)
+        summary_prompt = build_itinerary_summary_prompt(extracted_trip_data, itinerary)
+        ai_summary = ask_gemini(summary_prompt)
 
         return ChatResponse(
-            reply="Got it! ✅",
-            next_question=next_q,
-            question_index=question_index,
-            trip_data=trip_data
+            reply=ai_summary,
+            trip_data=extracted_trip_data,
+            itinerary=itinerary,
+            is_complete=True
         )
-
-    # --- All 10 questions answered — build itinerary ---
-    itinerary = build_itinerary(trip_data)
-
-    # --- Ask Ollama to summarize ---
-    prompt = build_itinerary_prompt(trip_data, itinerary)
-    ai_summary = ask_ollama(prompt)
 
     return ChatResponse(
-        reply=ai_summary,
-        question_index=10,
+        reply=clean_reply,
         trip_data=trip_data,
-        itinerary=itinerary,
-        is_complete=True
+        is_complete=False
     )
 
-
-# ---------- Run ----------
 
 if __name__ == "__main__":
     import uvicorn
