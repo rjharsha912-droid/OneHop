@@ -34,8 +34,12 @@ export default function LoginScreen() {
 
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      Alert.alert('Error', error?.response?.data?.detail ?? 'Something went wrong');
-    } finally {
+  console.log('SIGNUP ERROR:', error);
+  Alert.alert(
+    'Error',
+    JSON.stringify(error?.response?.data || error?.message || error)
+  );
+}finally {
       setLoading(false);
     }
   };
